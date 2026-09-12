@@ -9,6 +9,9 @@ from ..security import create_access_token, get_current_user, hash_password, ver
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
+# Shared account seeded by seed.py, so the app can be tried without signing up.
+DEMO_EMAIL = "demo@pickuphoops.app"
+
 
 @router.post("/register", response_model=Token, status_code=201)
 def register(body: RegisterRequest, db: Session = Depends(get_db)):
@@ -30,6 +33,23 @@ def login(body: LoginRequest, db: Session = Depends(get_db)):
     # Same error whether the email or the password is wrong — don't leak which.
     if user is None or not verify_password(body.password, user.password_hash):
         raise HTTPException(status_code=401, detail="Incorrect email or password")
+    return Token(access_token=create_access_token(user.id))
+
+
+@router.post("/demo", response_model=Token)
+def demo_login(db: Session = Depends(get_db)):
+    """Log in as the shared demo account. No credentials, one click.
+
+    Deliberately public: it exists so anyone can try posting and joining
+    without creating an account. It is an ordinary user with no special
+    powers, and seed.py is what puts it in the database.
+    """
+    user = db.scalar(select(User).where(User.email == DEMO_EMAIL))
+    if user is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Demo account is not set up on this server.",
+        )
     return Token(access_token=create_access_token(user.id))
 
 

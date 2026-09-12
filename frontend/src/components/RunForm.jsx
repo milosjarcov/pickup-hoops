@@ -36,9 +36,10 @@ export default function RunForm({ courtId, onCreated, onCancel }) {
 
   return (
     <form className="run-form" onSubmit={handleSubmit}>
+      <span className="label form-title">New run</span>
       {error && <p className="error">{error}</p>}
       <label>
-        When
+        <span className="label">When</span>
         <input
           type="datetime-local"
           value={startsAt}
@@ -46,30 +47,32 @@ export default function RunForm({ courtId, onCreated, onCancel }) {
           required
         />
       </label>
-      <label>
-        Skill level
-        <select value={skillLevel} onChange={(e) => setSkillLevel(e.target.value)}>
-          <option value="casual">Casual</option>
-          <option value="intermediate">Intermediate</option>
-          <option value="competitive">Competitive</option>
-        </select>
-      </label>
-      <label>
-        Max players
-        <input
-          type="number"
-          min={2}
-          max={30}
-          value={maxPlayers}
-          onChange={(e) => setMaxPlayers(e.target.value)}
-          required
-        />
-      </label>
+      <div className="form-row">
+        <label>
+          <span className="label">Skill</span>
+          <select value={skillLevel} onChange={(e) => setSkillLevel(e.target.value)}>
+            <option value="casual">Casual</option>
+            <option value="intermediate">Intermediate</option>
+            <option value="competitive">Competitive</option>
+          </select>
+        </label>
+        <label>
+          <span className="label">Max players</span>
+          <input
+            type="number"
+            min={2}
+            max={30}
+            value={maxPlayers}
+            onChange={(e) => setMaxPlayers(e.target.value)}
+            required
+          />
+        </label>
+      </div>
       <div className="run-actions">
         <button type="submit" disabled={busy}>
           {busy ? "Posting…" : "Post run"}
         </button>
-        <button type="button" className="link-btn" onClick={onCancel}>
+        <button type="button" className="ghost" onClick={onCancel}>
           Cancel
         </button>
       </div>
