@@ -13,3 +13,6 @@ dist/
 .env
 .vscode/
 .idea/
+
+# Local tool config
+.claude/
