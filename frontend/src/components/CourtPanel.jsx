@@ -1,17 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { api } from "../api";
 import { useAuth } from "../AuthContext";
+import { formatStart, initials } from "../utils";
 import RunForm from "./RunForm";
-
-function formatStart(iso) {
-  return new Date(iso).toLocaleString(undefined, {
-    weekday: "short",
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  });
-}
 
 export default function CourtPanel({ court, onClose }) {
   const { token, user } = useAuth();
@@ -50,7 +41,7 @@ export default function CourtPanel({ court, onClose }) {
           <h2>{court.name}</h2>
           <p className="muted">{court.address}</p>
         </div>
-        <button className="link-btn" onClick={onClose}>
+        <button className="close-btn" onClick={onClose} aria-label="Close panel">
           ✕
         </button>
       </div>
@@ -67,25 +58,54 @@ export default function CourtPanel({ court, onClose }) {
           onCancel={() => setShowForm(false)}
         />
       ) : (
-        <button onClick={() => setShowForm(true)}>+ Post a run</button>
+        <button className="post-run-btn" onClick={() => setShowForm(true)}>
+          + Post a run
+        </button>
       )}
 
       <h3>Upcoming runs</h3>
-      {runs.length === 0 && <p className="muted">Nothing scheduled — post one!</p>}
+      {runs.length === 0 && (
+        <div className="empty-state">
+          Nothing scheduled here yet — post the first run!
+        </div>
+      )}
 
       {runs.map((run) => {
         const joined = run.players.some((p) => p.id === user.id);
         const isHost = run.host.id === user.id;
         const isFull = run.players.length >= run.max_players;
+        const fill = Math.min(100, (run.players.length / run.max_players) * 100);
         return (
           <div className="run-card" key={run.id}>
-            <div className="run-when">{formatStart(run.starts_at)}</div>
-            <div className="muted">
-              {run.skill_level} · {run.players.length}/{run.max_players} players
-              · hosted by {run.host.name}
+            <div className="run-when">
+              {formatStart(run.starts_at)}
+              <span className={`badge ${run.skill_level}`}>{run.skill_level}</span>
             </div>
-            <div className="muted small">
-              {run.players.map((p) => p.name).join(", ")}
+            <div className="capacity">
+              <div className="capacity-track">
+                <div
+                  className={`capacity-fill${isFull ? " full" : ""}`}
+                  style={{ width: `${fill}%` }}
+                />
+              </div>
+              <div className="capacity-label">
+                <span>
+                  {run.players.length}/{run.max_players} players
+                </span>
+                <span>{isFull ? "Full" : `${run.max_players - run.players.length} spots left`}</span>
+              </div>
+            </div>
+            <div className="player-list">
+              {run.players.map((p) => (
+                <span
+                  key={p.id}
+                  className={`avatar${p.id === run.host.id ? " host" : ""}`}
+                  title={p.id === run.host.id ? `${p.name} (host)` : p.name}
+                >
+                  {initials(p.name)}
+                </span>
+              ))}
+              <span className="host-tag">hosted by {run.host.name}</span>
             </div>
             <div className="run-actions">
               {isHost ? (
@@ -96,15 +116,18 @@ export default function CourtPanel({ court, onClose }) {
                   Cancel run
                 </button>
               ) : joined ? (
-                <button onClick={() => call(`/runs/${run.id}/leave`, "POST")}>
-                  Leave
+                <button
+                  className="ghost"
+                  onClick={() => call(`/runs/${run.id}/leave`, "POST")}
+                >
+                  Leave run
                 </button>
               ) : (
                 <button
                   disabled={isFull}
                   onClick={() => call(`/runs/${run.id}/join`, "POST")}
                 >
-                  {isFull ? "Full" : "Join"}
+                  {isFull ? "Run is full" : "Join run"}
                 </button>
               )}
             </div>

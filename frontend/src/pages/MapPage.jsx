@@ -1,24 +1,22 @@
 import { useEffect, useState } from "react";
 import { MapContainer, Marker, TileLayer, Tooltip } from "react-leaflet";
 import L from "leaflet";
-import markerIcon from "leaflet/dist/images/marker-icon.png";
-import markerIcon2x from "leaflet/dist/images/marker-icon-2x.png";
-import markerShadow from "leaflet/dist/images/marker-shadow.png";
 import { api } from "../api";
 import { useAuth } from "../AuthContext";
+import { initials } from "../utils";
 import CourtPanel from "../components/CourtPanel";
-
-// Leaflet's default marker images don't survive bundling; point it at the
-// copies Vite serves from the leaflet package. Classic Leaflet+bundler fix —
-// _getIconUrl must go first or Leaflet keeps guessing (wrong) paths.
-delete L.Icon.Default.prototype._getIconUrl;
-L.Icon.Default.mergeOptions({
-  iconUrl: markerIcon,
-  iconRetinaUrl: markerIcon2x,
-  shadowUrl: markerShadow,
-});
+import Ball, { BALL_SVG } from "../components/Ball";
 
 const MONTREAL_CENTER = [45.515, -73.6];
+
+function courtIcon(selected) {
+  return L.divIcon({
+    className: "",
+    html: `<div class="court-marker${selected ? " selected" : ""}">${BALL_SVG}</div>`,
+    iconSize: [36, 36],
+    iconAnchor: [18, 18],
+  });
+}
 
 export default function MapPage() {
   const { user, logout } = useAuth();
@@ -32,10 +30,16 @@ export default function MapPage() {
   return (
     <div className="map-page">
       <header className="topbar">
-        <span className="brand">🏀 Pickup Hoops</span>
+        <span className="brand">
+          <span className="ball"><Ball /></span>
+          Pickup Hoops
+        </span>
         <span className="topbar-right">
-          {user?.name}
-          <button className="link-btn" onClick={logout}>
+          <span className="user-chip">
+            <span className="avatar">{initials(user?.name)}</span>
+            {user?.name}
+          </span>
+          <button className="ghost" onClick={logout}>
             Log out
           </button>
         </span>
@@ -43,13 +47,14 @@ export default function MapPage() {
       <div className="map-layout">
         <MapContainer center={MONTREAL_CENTER} zoom={12} className="map">
           <TileLayer
-            url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
-            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+            url="https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}"
+            attribution='Tiles &copy; Esri &mdash; Esri, DeLorme, NAVTEQ | Data: <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
           />
           {courts.map((court) => (
             <Marker
               key={court.id}
               position={[court.latitude, court.longitude]}
+              icon={courtIcon(selectedCourt?.id === court.id)}
               eventHandlers={{ click: () => setSelectedCourt(court) }}
             >
               <Tooltip>{court.name}</Tooltip>

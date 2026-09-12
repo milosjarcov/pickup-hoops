@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../AuthContext";
+import Ball from "../components/Ball";
 
 export default function Register() {
   const { register } = useAuth();
@@ -28,7 +29,13 @@ export default function Register() {
   return (
     <div className="auth-page">
       <form className="auth-card" onSubmit={handleSubmit}>
-        <h1>🏀 Pickup Hoops</h1>
+        <div className="auth-brand">
+          <span className="ball"><Ball /></span>
+          <div>
+            <h1>Pickup Hoops</h1>
+            <p>Pickup basketball in Montreal</p>
+          </div>
+        </div>
         <h2>Create an account</h2>
         {error && <p className="error">{error}</p>}
         <label>
