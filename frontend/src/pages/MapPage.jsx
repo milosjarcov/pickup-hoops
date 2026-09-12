@@ -1,72 +1,149 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { MapContainer, Marker, TileLayer, Tooltip } from "react-leaflet";
 import L from "leaflet";
 import { api } from "../api";
 import { useAuth } from "../AuthContext";
 import { initials } from "../utils";
 import CourtPanel from "../components/CourtPanel";
-import Ball, { BALL_SVG } from "../components/Ball";
+import Ball from "../components/Ball";
 
 const MONTREAL_CENTER = [45.515, -73.6];
 
-function courtIcon(selected) {
+function courtIcon(number, selected) {
   return L.divIcon({
     className: "",
-    html: `<div class="court-marker${selected ? " selected" : ""}">${BALL_SVG}</div>`,
-    iconSize: [36, 36],
-    iconAnchor: [18, 18],
+    html: `<div class="court-pin${selected ? " selected" : ""}"><span>${number}</span></div>`,
+    iconSize: [34, 34],
+    iconAnchor: [15, 30],
   });
 }
 
 export default function MapPage() {
   const { user, logout } = useAuth();
   const [courts, setCourts] = useState([]);
+  const [runs, setRuns] = useState([]);
   const [selectedCourt, setSelectedCourt] = useState(null);
+  const mapRef = useRef(null);
+
+  const loadRuns = () => api("/runs").then(setRuns).catch(console.error);
 
   useEffect(() => {
     api("/courts").then(setCourts).catch(console.error);
+    loadRuns();
   }, []);
 
+  const runsByCourt = useMemo(() => {
+    const counts = {};
+    for (const run of runs) counts[run.court_id] = (counts[run.court_id] ?? 0) + 1;
+    return counts;
+  }, [runs]);
+
+  function selectCourt(court) {
+    setSelectedCourt(court);
+    mapRef.current?.flyTo([court.latitude - 0.015, court.longitude], 14, {
+      duration: 0.6,
+    });
+  }
+
+  const ticker = `FIND A RUN — PICK A COURT — SHOW UP — ${courts.length} COURTS · MONTRÉAL — `;
+
   return (
-    <div className="map-page">
+    <div className="app">
       <header className="topbar">
-        <span className="brand">
+        <div className="brand-sm">
           <span className="ball"><Ball /></span>
           Pickup Hoops
-        </span>
-        <span className="topbar-right">
+        </div>
+        <div className="ticker" aria-hidden="true">
+          <div className="ticker-inner">
+            {ticker}
+            {ticker}
+            {ticker}
+            {ticker}
+          </div>
+        </div>
+        <div className="top-right">
           <span className="user-chip">
             <span className="avatar">{initials(user?.name)}</span>
             {user?.name}
           </span>
-          <button className="ghost" onClick={logout}>
-            Log out
-          </button>
-        </span>
+          <button onClick={logout}>Log out</button>
+        </div>
       </header>
-      <div className="map-layout">
-        <MapContainer center={MONTREAL_CENTER} zoom={12} className="map">
-          <TileLayer
-            url="https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}"
-            attribution='Tiles &copy; Esri &mdash; Esri, DeLorme, NAVTEQ | Data: <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-          />
-          {courts.map((court) => (
-            <Marker
-              key={court.id}
-              position={[court.latitude, court.longitude]}
-              icon={courtIcon(selectedCourt?.id === court.id)}
-              eventHandlers={{ click: () => setSelectedCourt(court) }}
-            >
-              <Tooltip>{court.name}</Tooltip>
-            </Marker>
-          ))}
-        </MapContainer>
-        {selectedCourt && (
-          <CourtPanel
-            court={selectedCourt}
-            onClose={() => setSelectedCourt(null)}
-          />
-        )}
+      <div className="main">
+        <aside className="rail">
+          {selectedCourt ? (
+            <CourtPanel
+              court={selectedCourt}
+              onBack={() => setSelectedCourt(null)}
+              onChanged={loadRuns}
+            />
+          ) : (
+            <>
+              <div className="rail-head">
+                <h1>
+                  Pickup
+                  <br />
+                  Hoops
+                </h1>
+                <p className="tagline">
+                  {courts.length} courts · {runs.length} upcoming runs · Montréal
+                </p>
+              </div>
+              <div className="rail-label">Court index — pick one</div>
+              <ol className="court-index">
+                {courts.map((court, i) => (
+                  <li key={court.id}>
+                    <button
+                      className="court-row"
+                      onClick={() => selectCourt(court)}
+                    >
+                      <span className="court-num">
+                        {String(i + 1).padStart(2, "0")}
+                      </span>
+                      <span className="court-meta">
+                        <strong>{court.name}</strong>
+                        <small>{court.address}</small>
+                      </span>
+                      {runsByCourt[court.id] > 0 && (
+                        <span className="run-count">
+                          {runsByCourt[court.id]} run
+                          {runsByCourt[court.id] === 1 ? "" : "s"}
+                        </span>
+                      )}
+                    </button>
+                  </li>
+                ))}
+              </ol>
+            </>
+          )}
+        </aside>
+        <div className="map-wrap">
+          <MapContainer
+            center={MONTREAL_CENTER}
+            zoom={12}
+            className="map"
+            ref={mapRef}
+          >
+            <TileLayer
+              url="https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}"
+              attribution='Tiles &copy; Esri &mdash; Esri, DeLorme, NAVTEQ | Data: <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+            />
+            {courts.map((court, i) => (
+              <Marker
+                key={court.id}
+                position={[court.latitude, court.longitude]}
+                icon={courtIcon(
+                  String(i + 1).padStart(2, "0"),
+                  selectedCourt?.id === court.id,
+                )}
+                eventHandlers={{ click: () => selectCourt(court) }}
+              >
+                <Tooltip>{court.name}</Tooltip>
+              </Marker>
+            ))}
+          </MapContainer>
+        </div>
       </div>
     </div>
   );

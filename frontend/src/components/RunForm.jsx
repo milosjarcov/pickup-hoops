@@ -66,7 +66,7 @@ export default function RunForm({ courtId, onCreated, onCancel }) {
         />
       </label>
       <div className="run-actions">
-        <button type="submit" disabled={busy}>
+        <button type="submit" className="primary" disabled={busy}>
           {busy ? "Posting…" : "Post run"}
         </button>
         <button type="button" className="link-btn" onClick={onCancel}>

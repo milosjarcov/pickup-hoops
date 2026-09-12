@@ -10,20 +10,21 @@ export function initials(name) {
 
 export function formatStart(iso) {
   const start = new Date(iso);
-  const day = new Intl.DateTimeFormat(undefined, { day: "numeric" }).format(start);
-  const today = new Intl.DateTimeFormat(undefined, { day: "numeric" }).format(new Date());
-  const tomorrow = new Intl.DateTimeFormat(undefined, { day: "numeric" }).format(
-    new Date(Date.now() + 864e5),
-  );
+  const today = new Date();
+  const tomorrow = new Date(Date.now() + 864e5);
+  const day =
+    start.toDateString() === today.toDateString()
+      ? "Today"
+      : start.toDateString() === tomorrow.toDateString()
+        ? "Tomorrow"
+        : start.toLocaleDateString(undefined, {
+            weekday: "short",
+            month: "short",
+            day: "numeric",
+          });
   const time = start.toLocaleTimeString(undefined, {
     hour: "numeric",
     minute: "2-digit",
   });
-  const date = start.toLocaleDateString(undefined, {
-    weekday: "short",
-    month: "short",
-    day: "numeric",
-  });
-  const prefix = day === today ? "Today" : day === tomorrow ? "Tomorrow" : date;
-  return `${prefix} · ${time}`;
+  return { day, time };
 }

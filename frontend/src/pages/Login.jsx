@@ -56,13 +56,14 @@ export default function Login() {
             required
           />
         </label>
-        <button type="submit" disabled={busy}>
+        <button type="submit" className="primary" disabled={busy}>
           {busy ? "Logging in…" : "Log in"}
         </button>
         <p className="switch">
           No account? <Link to="/register">Register</Link>
         </p>
       </form>
+      <p className="auth-footnote">Real courts · Real runs · Montréal</p>
     </div>
   );
 }

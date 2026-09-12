@@ -4,7 +4,7 @@ import { useAuth } from "../AuthContext";
 import { formatStart, initials } from "../utils";
 import RunForm from "./RunForm";
 
-export default function CourtPanel({ court, onClose }) {
+export default function CourtPanel({ court, onBack, onChanged }) {
   const { token, user } = useAuth();
   const [runs, setRuns] = useState([]);
   const [error, setError] = useState(null);
@@ -29,22 +29,19 @@ export default function CourtPanel({ court, onClose }) {
     try {
       await api(path, { method, token });
       refresh();
+      onChanged?.();
     } catch (err) {
       setError(err.message);
     }
   }
 
   return (
-    <aside className="panel">
-      <div className="panel-header">
-        <div>
-          <h2>{court.name}</h2>
-          <p className="muted">{court.address}</p>
-        </div>
-        <button className="close-btn" onClick={onClose} aria-label="Close panel">
-          ✕
-        </button>
-      </div>
+    <div className="court-detail">
+      <button className="link-btn back-btn" onClick={onBack}>
+        ← All courts
+      </button>
+      <h2>{court.name}</h2>
+      <p className="address">{court.address}</p>
 
       {error && <p className="error">{error}</p>}
 
@@ -54,31 +51,37 @@ export default function CourtPanel({ court, onClose }) {
           onCreated={() => {
             setShowForm(false);
             refresh();
+            onChanged?.();
           }}
           onCancel={() => setShowForm(false)}
         />
       ) : (
-        <button className="post-run-btn" onClick={() => setShowForm(true)}>
+        <button className="primary post-run-btn" onClick={() => setShowForm(true)}>
           + Post a run
         </button>
       )}
 
-      <h3>Upcoming runs</h3>
+      <div className="section-label">Upcoming runs</div>
       {runs.length === 0 && (
         <div className="empty-state">
-          Nothing scheduled here yet — post the first run!
+          Nothing scheduled here yet —<br />
+          post the first run
         </div>
       )}
 
       {runs.map((run) => {
+        const { day, time } = formatStart(run.starts_at);
         const joined = run.players.some((p) => p.id === user.id);
         const isHost = run.host.id === user.id;
         const isFull = run.players.length >= run.max_players;
         const fill = Math.min(100, (run.players.length / run.max_players) * 100);
         return (
           <div className="run-card" key={run.id}>
-            <div className="run-when">
-              {formatStart(run.starts_at)}
+            <div className="run-top">
+              <div>
+                <div className="run-time">{time}</div>
+                <div className="run-day">{day}</div>
+              </div>
               <span className={`badge ${run.skill_level}`}>{run.skill_level}</span>
             </div>
             <div className="capacity">
@@ -90,9 +93,13 @@ export default function CourtPanel({ court, onClose }) {
               </div>
               <div className="capacity-label">
                 <span>
-                  {run.players.length}/{run.max_players} players
+                  {run.players.length}/{run.max_players} in
                 </span>
-                <span>{isFull ? "Full" : `${run.max_players - run.players.length} spots left`}</span>
+                <span>
+                  {isFull
+                    ? "FULL"
+                    : `${run.max_players - run.players.length} SPOTS LEFT`}
+                </span>
               </div>
             </div>
             <div className="player-list">
@@ -105,7 +112,7 @@ export default function CourtPanel({ court, onClose }) {
                   {initials(p.name)}
                 </span>
               ))}
-              <span className="host-tag">hosted by {run.host.name}</span>
+              <span className="host-tag">host: {run.host.name}</span>
             </div>
             <div className="run-actions">
               {isHost ? (
@@ -120,10 +127,11 @@ export default function CourtPanel({ court, onClose }) {
                   className="ghost"
                   onClick={() => call(`/runs/${run.id}/leave`, "POST")}
                 >
-                  Leave run
+                  Leave
                 </button>
               ) : (
                 <button
+                  className="primary"
                   disabled={isFull}
                   onClick={() => call(`/runs/${run.id}/join`, "POST")}
                 >
@@ -134,6 +142,6 @@ export default function CourtPanel({ court, onClose }) {
           </div>
         );
       })}
-    </aside>
+    </div>
   );
 }

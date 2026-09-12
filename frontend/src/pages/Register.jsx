@@ -68,13 +68,14 @@ export default function Register() {
             maxLength={72}
           />
         </label>
-        <button type="submit" disabled={busy}>
+        <button type="submit" className="primary" disabled={busy}>
           {busy ? "Creating…" : "Register"}
         </button>
         <p className="switch">
           Already have an account? <Link to="/login">Log in</Link>
         </p>
       </form>
+      <p className="auth-footnote">Real courts · Real runs · Montréal</p>
     </div>
   );
 }
