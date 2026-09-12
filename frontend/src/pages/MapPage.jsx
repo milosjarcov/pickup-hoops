@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { MapContainer, Marker, TileLayer, Tooltip } from "react-leaflet";
 import L from "leaflet";
 import { api } from "../api";
@@ -9,17 +10,18 @@ import Ball from "../components/Ball";
 
 const MONTREAL_CENTER = [45.515, -73.6];
 
-function courtIcon(number, selected) {
+function courtIcon(number, selected, delayMs) {
   return L.divIcon({
     className: "",
-    html: `<div class="court-pin${selected ? " selected" : ""}"><span>${number}</span></div>`,
+    html: `<div class="court-pin${selected ? " selected" : ""}" style="animation-delay:${delayMs}ms"><span>${number}</span></div>`,
     iconSize: [34, 34],
     iconAnchor: [15, 30],
   });
 }
 
 export default function MapPage() {
-  const { user, logout } = useAuth();
+  const { user, token, logout } = useAuth();
+  const navigate = useNavigate();
   const [courts, setCourts] = useState([]);
   const [runs, setRuns] = useState([]);
   const [selectedCourt, setSelectedCourt] = useState(null);
@@ -63,11 +65,22 @@ export default function MapPage() {
           </div>
         </div>
         <div className="top-right">
-          <span className="user-chip">
-            <span className="avatar">{initials(user?.name)}</span>
-            {user?.name}
-          </span>
-          <button onClick={logout}>Log out</button>
+          {token ? (
+            <>
+              <span className="user-chip">
+                <span className="avatar">{initials(user?.name)}</span>
+                {user?.name}
+              </span>
+              <button onClick={logout}>Log out</button>
+            </>
+          ) : (
+            <>
+              <button onClick={() => navigate("/login")}>Log in</button>
+              <button className="primary" onClick={() => navigate("/register")}>
+                Sign up
+              </button>
+            </>
+          )}
         </div>
       </header>
       <div className="main">
@@ -81,16 +94,50 @@ export default function MapPage() {
           ) : (
             <>
               <div className="rail-head">
+                {!token && (
+                  <span className="hero-ball"><Ball /></span>
+                )}
                 <h1>
                   Pickup
                   <br />
                   Hoops
                 </h1>
-                <p className="tagline">
-                  {courts.length} courts · {runs.length} upcoming runs · Montréal
-                </p>
+                {token ? (
+                  <p className="tagline">
+                    {courts.length} courts · {runs.length} upcoming runs ·
+                    Montréal
+                  </p>
+                ) : (
+                  <>
+                    <p className="hero-pitch">
+                      Pickup basketball,
+                      <br />
+                      minus the group chat.
+                    </p>
+                    <p className="tagline">
+                      {courts.length} courts · {runs.length} upcoming runs ·
+                      Montréal
+                    </p>
+                    <div className="hero-cta">
+                      <button
+                        className="primary"
+                        onClick={() => navigate("/register")}
+                      >
+                        Join a run
+                      </button>
+                      <button
+                        className="ghost"
+                        onClick={() => navigate("/login")}
+                      >
+                        Log in
+                      </button>
+                    </div>
+                  </>
+                )}
               </div>
-              <div className="rail-label">Court index — pick one</div>
+              <div className="rail-label">
+                {token ? "Court index — pick one" : "Browse the courts — free to look"}
+              </div>
               <ol className="court-index">
                 {courts.map((court, i) => (
                   <li key={court.id}>
@@ -136,6 +183,7 @@ export default function MapPage() {
                 icon={courtIcon(
                   String(i + 1).padStart(2, "0"),
                   selectedCourt?.id === court.id,
+                  300 + i * 80,
                 )}
                 eventHandlers={{ click: () => selectCourt(court) }}
               >

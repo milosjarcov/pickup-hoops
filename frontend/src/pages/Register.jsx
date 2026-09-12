@@ -75,7 +75,10 @@ export default function Register() {
           Already have an account? <Link to="/login">Log in</Link>
         </p>
       </form>
-      <p className="auth-footnote">Real courts · Real runs · Montréal</p>
+      <p className="auth-footnote">
+        Real courts · Real runs · Montréal —{" "}
+        <Link to="/">just browsing?</Link>
+      </p>
     </div>
   );
 }

@@ -1,8 +1,32 @@
 import { useCallback, useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { api } from "../api";
 import { useAuth } from "../AuthContext";
 import { formatStart, initials } from "../utils";
 import RunForm from "./RunForm";
+
+function SignInCta() {
+  return (
+    <div className="signin-cta">
+      <p>
+        Want in? Make an account to join runs and post your own — takes 30
+        seconds.
+      </p>
+      <div className="cta-row">
+        <Link to="/register">
+          <button className="primary" style={{ width: "100%" }}>
+            Sign up
+          </button>
+        </Link>
+        <Link to="/login" style={{ flex: 1 }}>
+          <button className="ghost" style={{ width: "100%" }}>
+            Log in
+          </button>
+        </Link>
+      </div>
+    </div>
+  );
+}
 
 export default function CourtPanel({ court, onBack, onChanged }) {
   const { token, user } = useAuth();
@@ -45,21 +69,26 @@ export default function CourtPanel({ court, onBack, onChanged }) {
 
       {error && <p className="error">{error}</p>}
 
-      {showForm ? (
-        <RunForm
-          courtId={court.id}
-          onCreated={() => {
-            setShowForm(false);
-            refresh();
-            onChanged?.();
-          }}
-          onCancel={() => setShowForm(false)}
-        />
-      ) : (
-        <button className="primary post-run-btn" onClick={() => setShowForm(true)}>
-          + Post a run
-        </button>
-      )}
+      {token &&
+        (showForm ? (
+          <RunForm
+            courtId={court.id}
+            onCreated={() => {
+              setShowForm(false);
+              refresh();
+              onChanged?.();
+            }}
+            onCancel={() => setShowForm(false)}
+          />
+        ) : (
+          <button
+            className="primary post-run-btn"
+            onClick={() => setShowForm(true)}
+          >
+            + Post a run
+          </button>
+        ))}
+      {!token && <SignInCta />}
 
       <div className="section-label">Upcoming runs</div>
       {runs.length === 0 && (
@@ -71,8 +100,8 @@ export default function CourtPanel({ court, onBack, onChanged }) {
 
       {runs.map((run) => {
         const { day, time } = formatStart(run.starts_at);
-        const joined = run.players.some((p) => p.id === user.id);
-        const isHost = run.host.id === user.id;
+        const joined = user ? run.players.some((p) => p.id === user.id) : false;
+        const isHost = user ? run.host.id === user.id : false;
         const isFull = run.players.length >= run.max_players;
         const fill = Math.min(100, (run.players.length / run.max_players) * 100);
         return (
@@ -115,7 +144,13 @@ export default function CourtPanel({ court, onBack, onChanged }) {
               <span className="host-tag">host: {run.host.name}</span>
             </div>
             <div className="run-actions">
-              {isHost ? (
+              {!token ? (
+                <Link to="/register" style={{ flex: 1 }}>
+                  <button className="primary" style={{ width: "100%" }}>
+                    Sign up to join
+                  </button>
+                </Link>
+              ) : isHost ? (
                 <button
                   className="danger"
                   onClick={() => call(`/runs/${run.id}`, "DELETE")}

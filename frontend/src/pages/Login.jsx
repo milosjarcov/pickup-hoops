@@ -63,7 +63,10 @@ export default function Login() {
           No account? <Link to="/register">Register</Link>
         </p>
       </form>
-      <p className="auth-footnote">Real courts · Real runs · Montréal</p>
+      <p className="auth-footnote">
+        Real courts · Real runs · Montréal —{" "}
+        <Link to="/">just browsing?</Link>
+      </p>
     </div>
   );
 }
