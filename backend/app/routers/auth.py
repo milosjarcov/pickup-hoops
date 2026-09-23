@@ -1,16 +1,15 @@
+import secrets
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..database import get_db
 from ..models import User
-from ..schemas import LoginRequest, RegisterRequest, Token, UserOut
+from ..schemas import GUEST_EMAIL_DOMAIN, LoginRequest, RegisterRequest, Token, UserOut
 from ..security import create_access_token, get_current_user, hash_password, verify_password
 
 router = APIRouter(prefix="/auth", tags=["auth"])
-
-# Shared account seeded by seed.py, so the app can be tried without signing up.
-DEMO_EMAIL = "demo@pickuphoops.app"
 
 
 @router.post("/register", response_model=Token, status_code=201)
@@ -36,20 +35,21 @@ def login(body: LoginRequest, db: Session = Depends(get_db)):
     return Token(access_token=create_access_token(user.id))
 
 
-@router.post("/demo", response_model=Token)
-def demo_login(db: Session = Depends(get_db)):
-    """Log in as the shared demo account. No credentials, one click.
+@router.post("/guest", response_model=Token, status_code=201)
+def guest(db: Session = Depends(get_db)):
+    """One tap account for people who just want to try the app.
 
-    Deliberately public: it exists so anyone can try posting and joining
-    without creating an account. It is an ordinary user with no special
-    powers, and seed.py is what puts it in the database.
+    Creates a throwaway user with a random email and password nobody knows,
+    so the only way back in is the token returned here.
     """
-    user = db.scalar(select(User).where(User.email == DEMO_EMAIL))
-    if user is None:
-        raise HTTPException(
-            status_code=404,
-            detail="Demo account is not set up on this server.",
-        )
+    user = User(
+        name=f"Guest {secrets.randbelow(9000) + 1000}",
+        email=f"guest-{secrets.token_hex(8)}@{GUEST_EMAIL_DOMAIN}",
+        password_hash=hash_password(secrets.token_urlsafe(32)),
+    )
+    db.add(user)
+    db.commit()
+    db.refresh(user)
     return Token(access_token=create_access_token(user.id))
 
 

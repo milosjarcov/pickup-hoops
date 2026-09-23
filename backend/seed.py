@@ -1,25 +1,22 @@
-"""Seed courts, a demo account and a week of runs. Run from backend/:
+"""Seed the database. Run from backend/:
 
-    .venv/bin/python seed.py            # macOS / Linux
-    .venv\\Scripts\\python seed.py       # Windows
+    .venv/Scripts/python seed.py           # the 7 real Montreal courts
+    .venv/Scripts/python seed.py --demo    # courts + demo players and a week of runs
 
-Safe to re-run. Courts and users are only created if missing, and runs are
-only created when nothing upcoming is left, so a long-running demo server
-refills itself instead of showing an empty map.
-
-    python seed.py --refresh            # wipe upcoming runs and rebuild them
+Safe to re-run. Courts are only added once, and --demo only tops up runs when
+fewer than DEMO_TARGET upcoming demo runs are left. That makes it a good
+start command on a server that sleeps: every wake-up refreshes the demo.
 """
+import random
+import secrets
 import sys
 from datetime import datetime, timedelta
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from app.database import Base, SessionLocal, engine
 from app.models import Court, Run, User
-from app.routers.auth import DEMO_EMAIL
 from app.security import hash_password
-
-DEMO_PASSWORD = "hoopsdemo123"
 
 COURTS = [
     Court(name="Jeanne-Mance Park", latitude=45.5142, longitude=-73.5852,
@@ -38,118 +35,87 @@ COURTS = [
           address="Av. Laurier E & Rue de Mentana, Montreal, QC"),
 ]
 
-# Regulars who fill out the rosters. Nobody logs in as these.
-PLAYERS = [
-    "Andre Dubois", "Malik Chen", "Sam Rivard", "Tariq Bell", "Jon Okafor",
-    "Luc Tremblay", "Dev Patel", "Chris Nadeau", "Ade Lawal", "Rami Haddad",
-    "Theo Gagne", "Nico Russo", "Paul Kim", "Yanis Ould", "Marc Belanger",
-    "Ben Cote", "Sid Arora", "Omar Diallo", "Max Leduc", "Ian Fortin",
+# Demo players have addresses on a reserved domain and random passwords, so
+# nobody can sign in as them. They exist only to host and fill runs.
+DEMO_DOMAIN = "demo.example.com"
+DEMO_NAMES = [
+    "Jordan Lee", "Nadia Roy", "Theo Martin", "Sam Okafor", "Maya Chen",
+    "Luc Gagnon", "Priya Shah", "Marcus Brown", "Élise Tremblay", "Omar Haddad",
 ]
-
-# (court index, hours from now, skill, max players, how many are in,
-#  is the demo user already playing)
-SCHEDULE = [
-    (0, 2,   "competitive",  10, 8,  True),   # pulses on the map as "starting soon"
-    (2, 5,   "casual",        8, 3,  True),
-    (1, 23,  "intermediate", 10, 6,  False),
-    (4, 27,  "competitive",  10, 10, False),  # full, so Join shows disabled
-    (5, 30,  "casual",       12, 4,  False),
-    (3, 49,  "intermediate", 10, 2,  False),
-    (1, 54,  "casual",       10, 7,  False),
-    (2, 73,  "competitive",   8, 5,  False),
-    (0, 96,  "intermediate", 10, 4,  False),
-    (6, 121, "casual",       12, 3,  False),
-]
+DEMO_TARGET = 12  # upcoming demo runs to keep on the map
+DEMO_DAYS = 7
 
 
 def seed_courts(db):
-    if db.scalar(select(Court).limit(1)):
-        return db.scalars(select(Court)).all(), 0
+    if db.scalar(select(func.count(Court.id))) > 0:
+        print("Courts already seeded.")
+        return
     db.add_all(COURTS)
     db.commit()
-    return db.scalars(select(Court)).all(), len(COURTS)
+    print(f"Seeded {len(COURTS)} courts.")
 
 
-def seed_users(db):
-    created = 0
-    demo = db.scalar(select(User).where(User.email == DEMO_EMAIL))
-    if demo is None:
-        demo = User(name="Demo Player", email=DEMO_EMAIL,
-                    password_hash=hash_password(DEMO_PASSWORD))
-        db.add(demo)
-        created += 1
-
-    # One shared throwaway hash for the filler accounts: hashing 20 separate
-    # passwords with bcrypt is slow and none of them are ever used to log in.
-    filler_hash = hash_password("not-a-real-login-account")
-    regulars = []
-    for name in PLAYERS:
-        email = name.lower().replace(" ", ".") + "@example.com"
+def demo_players(db):
+    """Fetch the demo players, creating any that are missing."""
+    players = []
+    for i, name in enumerate(DEMO_NAMES):
+        email = f"demo-{i}@{DEMO_DOMAIN}"
         user = db.scalar(select(User).where(User.email == email))
         if user is None:
-            user = User(name=name, email=email, password_hash=filler_hash)
+            user = User(name=name, email=email, password_hash=hash_password(secrets.token_urlsafe(32)))
             db.add(user)
-            created += 1
-        regulars.append(user)
-
+        players.append(user)
     db.commit()
-    return demo, regulars, created
+    return players
 
 
-def seed_runs(db, courts, demo, regulars):
-    now = datetime.now()
-    for court_i, hours, skill, max_players, taken, demo_plays in SCHEDULE:
-        court = courts[court_i % len(courts)]
-        # A regular always fills the first slot, because roster[0] becomes the
-        # host and "Hosted by Demo Player" looks like test data to a visitor.
-        wanted = min(taken, max_players) - (1 if demo_plays else 0)
-        roster = []
-        # Offset the slice per run so the same faces are not in everything.
-        start = (court_i * 3 + hours) % len(regulars)
-        while len(roster) < wanted:
-            candidate = regulars[start % len(regulars)]
-            if candidate not in roster:
-                roster.append(candidate)
-            start += 1
-        if demo_plays:
-            roster.append(demo)
+def random_start(rng, now):
+    """An evening (or lunchtime) slot sometime in the next week."""
+    for _ in range(20):
+        day = now + timedelta(days=rng.randrange(DEMO_DAYS))
+        hour, minute = rng.choice([(12, 0), (17, 30), (18, 0), (18, 30), (19, 0), (19, 30), (20, 0)])
+        start = day.replace(hour=hour, minute=minute, second=0, microsecond=0)
+        if start > now + timedelta(hours=1):
+            return start
+    return (now + timedelta(days=1)).replace(hour=19, minute=0, second=0, microsecond=0)
 
+
+def seed_demo(db):
+    players = demo_players(db)
+    now = datetime.now()  # naive local time, same convention as the API
+    upcoming = db.scalar(
+        select(func.count(Run.id))
+        .join(User, Run.host_id == User.id)
+        .where(Run.starts_at >= now, User.email.like(f"%@{DEMO_DOMAIN}"))
+    )
+    missing = DEMO_TARGET - upcoming
+    if missing <= 0:
+        print(f"{upcoming} upcoming demo runs already, nothing to add.")
+        return
+
+    rng = random.Random()
+    courts = db.scalars(select(Court)).all()
+    for _ in range(missing):
+        host = rng.choice(players)
+        max_players = rng.choice([8, 10, 10, 10, 12])
+        # Mostly half-full runs, with the odd full one so every state shows up.
+        filled = max_players if rng.random() < 0.12 else rng.randint(2, max_players - 2)
+        others = rng.sample([p for p in players if p is not host], k=min(filled - 1, len(players) - 1))
         db.add(Run(
-            court_id=court.id,
-            host_id=roster[0].id,
-            starts_at=now + timedelta(hours=hours),
-            skill_level=skill,
+            court=rng.choice(courts),
+            host=host,
+            starts_at=random_start(rng, now),
+            skill_level=rng.choice(["casual", "casual", "intermediate", "competitive"]),
             max_players=max_players,
-            players=roster,
+            players=[host, *others],
         ))
     db.commit()
-    return len(SCHEDULE)
-
-
-def seed(refresh=False):
-    Base.metadata.create_all(engine)
-    with SessionLocal() as db:
-        courts, new_courts = seed_courts(db)
-        demo, regulars, new_users = seed_users(db)
-
-        upcoming = db.scalars(select(Run).where(Run.starts_at >= datetime.now())).all()
-        if refresh:
-            for run in upcoming:
-                db.delete(run)
-            db.commit()
-            upcoming = []
-
-        new_runs = 0
-        if upcoming:
-            print(f"{len(upcoming)} upcoming runs already scheduled, leaving them alone.")
-        else:
-            new_runs = seed_runs(db, courts, demo, regulars)
-
-        print(f"Courts: +{new_courts} (total {len(courts)})")
-        print(f"Users:  +{new_users}")
-        print(f"Runs:   +{new_runs}")
-        print(f"Demo login: {DEMO_EMAIL} / {DEMO_PASSWORD}")
+    print(f"Added {missing} demo runs.")
 
 
 if __name__ == "__main__":
-    seed(refresh="--refresh" in sys.argv)
+    Base.metadata.create_all(engine)
+    with SessionLocal() as db:
+        seed_courts(db)
+        if "--demo" in sys.argv:
+            seed_demo(db)

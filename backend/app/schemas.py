@@ -1,7 +1,11 @@
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, computed_field
+
+# Guest accounts get a made-up address on this domain (example.com is reserved
+# for exactly this kind of use, so it can never belong to a real person).
+GUEST_EMAIL_DOMAIN = "guest.example.com"
 
 
 # ---- auth ----
@@ -23,11 +27,27 @@ class Token(BaseModel):
 
 
 class UserOut(BaseModel):
+    """The signed-in user's own profile. Only /auth/me returns this."""
+
     model_config = ConfigDict(from_attributes=True)
 
     id: int
     name: str
     email: EmailStr
+
+    @computed_field
+    @property
+    def is_guest(self) -> bool:
+        return self.email.endswith("@" + GUEST_EMAIL_DOMAIN)
+
+
+class PlayerOut(BaseModel):
+    """Another player, as the public sees them: a name, never an email."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    name: str
 
 
 # ---- courts ----
@@ -59,5 +79,6 @@ class RunOut(BaseModel):
     starts_at: datetime
     skill_level: str
     max_players: int
-    host: UserOut
-    players: list[UserOut]
+    # PlayerOut, not UserOut: GET /runs is public, so it must not leak emails.
+    host: PlayerOut
+    players: list[PlayerOut]

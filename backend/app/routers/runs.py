@@ -76,11 +76,8 @@ def join_run(
     current_user: User = Depends(get_current_user),
 ):
     run = get_run_or_404(run_id, db)
-    # Idempotent on purpose. Anyone browsing signed out cannot know whether
-    # they are already on a roster, so joining twice is a no-op, not an error.
-    # A full run still fails, because that is a real refusal.
     if current_user in run.players:
-        return run
+        raise HTTPException(status_code=409, detail="Already joined this run")
     if len(run.players) >= run.max_players:
         raise HTTPException(status_code=409, detail="Run is full")
     run.players.append(current_user)
@@ -97,7 +94,7 @@ def leave_run(
 ):
     run = get_run_or_404(run_id, db)
     if current_user not in run.players:
-        return run  # idempotent, same reasoning as join
+        raise HTTPException(status_code=409, detail="You are not in this run")
     run.players.remove(current_user)
     db.commit()
     db.refresh(run)
