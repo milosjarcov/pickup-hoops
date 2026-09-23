@@ -1,10 +1,44 @@
-import { useState } from "react";
+import { useId, useState } from "react";
 import { api } from "../api";
 import { useAuth } from "../AuthContext";
+import { toDateValue, toTimeValue } from "../lib/format";
+import Segmented from "./Segmented";
+import Sheet from "./Sheet";
+import Spinner from "./Spinner";
+import Stepper from "./Stepper";
 
-export default function RunForm({ courtId, onCreated, onCancel }) {
+const SKILL_LEVELS = [
+  { value: "casual", label: "Casual" },
+  { value: "intermediate", label: "Intermediate" },
+  { value: "competitive", label: "Competitive" },
+];
+
+// Default to the next full hour: at 2:20 PM the form suggests 3:00 PM.
+// setHours rolls over into tomorrow on its own after 11 PM.
+function nextFullHour() {
+  const d = new Date();
+  d.setHours(d.getHours() + 1, 0, 0, 0);
+  return d;
+}
+
+// "New Run" sheet. Laid out like an iOS form: Cancel and Post in the title
+// bar, settings in grouped rows below.
+export default function RunForm({ court, onCreated, onCancel }) {
+  const titleId = useId();
+  return (
+    <Sheet labelledBy={titleId} onClose={onCancel}>
+      <RunFormContent court={court} titleId={titleId} onCreated={onCreated} onCancel={onCancel} />
+    </Sheet>
+  );
+}
+
+// The form itself, without the modal around it. The landing page shows this
+// directly as a preview of what posting a run looks like.
+export function RunFormContent({ court, titleId, onCreated, onCancel }) {
   const { token } = useAuth();
-  const [startsAt, setStartsAt] = useState("");
+  const [start] = useState(nextFullHour);
+  const [date, setDate] = useState(() => toDateValue(start));
+  const [time, setTime] = useState(() => toTimeValue(start));
   const [skillLevel, setSkillLevel] = useState("casual");
   const [maxPlayers, setMaxPlayers] = useState(10);
   const [error, setError] = useState(null);
@@ -15,66 +49,86 @@ export default function RunForm({ courtId, onCreated, onCancel }) {
     setError(null);
     setBusy(true);
     try {
-      // datetime-local gives "2026-07-14T19:00" — already valid ISO for the API.
+      // "2026-09-24" + "19:00" -> "2026-09-24T19:00", valid ISO for the API.
       await api("/runs", {
         method: "POST",
         token,
         body: {
-          court_id: courtId,
-          starts_at: startsAt,
+          court_id: court.id,
+          starts_at: `${date}T${time}`,
           skill_level: skillLevel,
-          max_players: Number(maxPlayers),
+          max_players: maxPlayers,
         },
       });
-      onCreated();
+      await onCreated();
     } catch (err) {
       setError(err.message);
-    } finally {
       setBusy(false);
     }
   }
 
   return (
-    <form className="run-form" onSubmit={handleSubmit}>
-      <span className="label form-title">New run</span>
-      {error && <p className="error">{error}</p>}
-      <label>
-        <span className="label">When</span>
-        <input
-          type="datetime-local"
-          value={startsAt}
-          onChange={(e) => setStartsAt(e.target.value)}
-          required
-        />
-      </label>
-      <div className="form-row">
-        <label>
-          <span className="label">Skill</span>
-          <select value={skillLevel} onChange={(e) => setSkillLevel(e.target.value)}>
-            <option value="casual">Casual</option>
-            <option value="intermediate">Intermediate</option>
-            <option value="competitive">Competitive</option>
-          </select>
-        </label>
-        <label>
-          <span className="label">Max players</span>
-          <input
-            type="number"
-            min={2}
-            max={30}
-            value={maxPlayers}
-            onChange={(e) => setMaxPlayers(e.target.value)}
-            required
-          />
-        </label>
-      </div>
-      <div className="run-actions">
-        <button type="submit" disabled={busy}>
-          {busy ? "Posting…" : "Post run"}
-        </button>
-        <button type="button" className="ghost" onClick={onCancel}>
+    <form onSubmit={handleSubmit}>
+      <header className="sheet-nav">
+        <button type="button" className="btn-text" onClick={onCancel}>
           Cancel
         </button>
+        <div className="sheet-heading">
+          <h2 id={titleId}>New Run</h2>
+          <p>{court.name}</p>
+        </div>
+        <button type="submit" className="btn-text is-strong" disabled={busy}>
+          {busy ? <Spinner label="Posting" /> : "Post"}
+        </button>
+      </header>
+
+      <div className="sheet-body">
+        <div className="group">
+          <label className="group-row">
+            <span>Date</span>
+            <input
+              type="date"
+              className="inline-input"
+              value={date}
+              min={toDateValue(new Date())}
+              onChange={(e) => setDate(e.target.value)}
+              required
+            />
+          </label>
+          <label className="group-row">
+            <span>Time</span>
+            <input
+              type="time"
+              className="inline-input"
+              value={time}
+              onChange={(e) => setTime(e.target.value)}
+              required
+            />
+          </label>
+        </div>
+
+        <p className="group-label">Skill Level</p>
+        <Segmented
+          name="skill_level"
+          label="Skill level"
+          options={SKILL_LEVELS}
+          value={skillLevel}
+          onChange={setSkillLevel}
+        />
+
+        <div className="group group-spaced">
+          <div className="group-row">
+            <span>Max Players</span>
+            <Stepper label="Players" value={maxPlayers} min={2} max={30} onChange={setMaxPlayers} />
+          </div>
+        </div>
+        <p className="group-footer">You'll be the first player in the run.</p>
+
+        {error && (
+          <p className="form-error" role="alert">
+            {error}
+          </p>
+        )}
       </div>
     </form>
   );

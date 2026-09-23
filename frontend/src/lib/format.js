@@ -1,53 +1,114 @@
-// Small shared derivations so every component labels a run the same way.
+// Small formatting helpers shared by the court list and the court panel.
+// The API sends naive local times ("2026-09-24T19:00:00"), and JS parses
+// those as local time, which is what we want for a Montreal-only app.
 
-export const SKILL_LEVELS = { casual: 1, intermediate: 2, competitive: 3 };
+// The UI copy is English, so dates are too. Using the browser's locale here
+// would give you "Today" next to "jeudi" on a French system.
+const LOCALE = "en-US";
+const timeFmt = new Intl.DateTimeFormat(LOCALE, { hour: "numeric", minute: "2-digit" });
+const weekdayFmt = new Intl.DateTimeFormat(LOCALE, { weekday: "long" });
+const shortDateFmt = new Intl.DateTimeFormat(LOCALE, { month: "short", day: "numeric" });
+const longDateFmt = new Intl.DateTimeFormat(LOCALE, {
+  weekday: "long",
+  month: "long",
+  day: "numeric",
+});
 
-/** "Andre Dubois" -> "AD", for the initials chips. */
-export function initials(name) {
-  return name
-    .split(/\s+/)
-    .filter(Boolean)
-    .map((word) => word[0])
-    .slice(0, 2)
-    .join("")
-    .toUpperCase();
+function startOfDay(date) {
+  const copy = new Date(date);
+  copy.setHours(0, 0, 0, 0);
+  return copy;
 }
 
-export function hoursUntil(iso) {
-  return (new Date(iso) - Date.now()) / 3_600_000;
+// Whole calendar days between today and `date`. Rounding absorbs the
+// 23 or 25 hour days around daylight saving changes.
+function daysFromToday(date) {
+  return Math.round((startOfDay(date) - startOfDay(new Date())) / 86_400_000);
 }
 
-/** Within the next 3 hours: the app's definition of "happening now-ish". */
-export function isSoon(iso) {
-  const h = hoursUntil(iso);
-  return h >= 0 && h <= 3;
+function relativeDay(date) {
+  const diff = daysFromToday(date);
+  if (diff === 0) return "Today";
+  if (diff === 1) return "Tomorrow";
+  if (diff < 7) return weekdayFmt.format(date);
+  return null;
 }
 
-/** Calendar-day difference, so 11pm -> 1am tomorrow still reads "Tmrw". */
-export function dayLabel(iso) {
+export function formatTime(iso) {
+  return timeFmt.format(new Date(iso));
+}
+
+// "Today", "Tomorrow", "Saturday", or "Oct 3" further out.
+export function relativeDayName(iso) {
   const date = new Date(iso);
-  const atMidnight = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
-  const days = Math.round((atMidnight(date) - atMidnight(new Date())) / 86_400_000);
-  if (days === 0) return "Today";
-  if (days === 1) return "Tmrw";
-  return date.toLocaleDateString(undefined, { weekday: "short" });
+  return relativeDay(date) ?? shortDateFmt.format(date);
 }
 
-export function timeLabel(iso) {
-  return new Date(iso).toLocaleTimeString([], {
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  });
+// "Today at 7:00 PM", "Saturday at 6:30 PM", "Oct 3 at 5:00 PM".
+export function formatWhen(iso) {
+  const date = new Date(iso);
+  return `${relativeDay(date) ?? shortDateFmt.format(date)} at ${formatTime(iso)}`;
 }
 
-export function fullWhen(iso) {
-  return new Date(iso).toLocaleString(undefined, {
-    weekday: "short",
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  });
+// Runs arrive sorted by start time, so runs on the same day are next to each
+// other and one pass is enough to group them.
+export function groupByDay(runs) {
+  const groups = [];
+  for (const run of runs) {
+    const date = new Date(run.starts_at);
+    const key = startOfDay(date).getTime();
+    const last = groups.at(-1);
+    if (last?.key === key) {
+      last.runs.push(run);
+    } else {
+      const relative = relativeDay(date);
+      groups.push({
+        key,
+        label: relative ?? longDateFmt.format(date),
+        // Relative labels get the full date beside them so "Tuesday" is never ambiguous.
+        detail: relative ? longDateFmt.format(date) : null,
+        runs: [run],
+      });
+    }
+  }
+  return groups;
+}
+
+// "YYYY-MM-DD" and "HH:MM" in local time, the formats <input type="date|time"> use.
+const pad = (n) => String(n).padStart(2, "0");
+export const toDateValue = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+export const toTimeValue = (d) => `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+
+export function plural(count, word) {
+  return `${count} ${word}${count === 1 ? "" : "s"}`;
+}
+
+export function capitalize(text) {
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
+// "Milos Jarcov" -> "MJ", "Guest 4821" -> "G". Only words that start with a
+// letter count. Array.from splits by character, not UTF-16 unit, so a name
+// that starts with an accent or emoji doesn't get cut in half.
+export function initials(name) {
+  const letters = name
+    .trim()
+    .split(/\s+/)
+    .filter((part) => /^\p{L}/u.test(part))
+    .map((part) => Array.from(part)[0]);
+  if (letters.length === 0) return "?";
+  return (letters[0] + (letters.length > 1 ? letters.at(-1) : "")).toUpperCase();
+}
+
+// Every court is in Montreal, so repeating it on each row is noise.
+export function shortAddress(address) {
+  return address.replace(/,\s*Montreal,\s*QC$/i, "");
+}
+
+// Case and accent insensitive, so "pere" finds "Père-Marquette Park".
+const fold = (text) => text.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+
+export function matchesQuery(court, query) {
+  const q = fold(query.trim());
+  return q === "" || fold(`${court.name} ${court.address}`).includes(q);
 }
